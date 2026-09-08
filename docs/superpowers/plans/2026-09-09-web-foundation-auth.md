@@ -4,26 +4,28 @@
 
 **Goal:** Build the first secure Next.js ARTX web slice with truthful public discovery surfaces, fail-closed private routes, arbitrary-domain email validation, safe error/alert handling, and passkey capability gating.
 
-**Architecture:** `artx-communication-web` is a presentation client over the Go backend. Public and private route/data contracts are separate. `proxy.ts` performs only an optimistic cookie-presence redirect; server components and the Go API remain authoritative. Passkey UI is enabled only when `auth.webauthn-v1` is explicitly advertised.
+**Architecture:** `artx-communication-web` is a presentation client over the Go backend. Public and private route/data contracts are separate. `proxy.ts` performs an early cookie-presence redirect only; the private server layout revalidates the credential against `GET /v1/session`, and the Go API remains authoritative for every resource. Passkey UI becomes usable only when a reviewed backend capability named exactly `auth.webauthn-v1` is enabled.
 
-**Tech Stack:** Node.js 22+, Next.js 16.3.3 Active LTS, React 19.2.7, TypeScript 7.0.2, Zod 4.5.4, CSS variables, Node built-in test runner for dependency-light core regression tests.
+**Tech Stack:** Node.js 22+, Next.js 16.3.3 Active LTS, React 19.2.7, TypeScript 7.0.2, CSS variables, dependency-light validation helpers, Node built-in test runner.
 
 **Spec:** `docs/superpowers/specs/2026-09-09-web-foundation-auth-design.md`
 
 ## Global Constraints
 
 - Never store access tokens, refresh tokens, private keys or recovery material in `localStorage` or `sessionStorage`.
-- Public DTOs must not contain private email, recovery, device/session, OAuth token, private workspace or unpublished draft fields.
-- Public surfaces never invent posts, users, verification, online, recommendation or security state.
-- Private routes fail closed when the `__Host-artx_session` session signal is absent; backend authorization remains authoritative.
-- Accept valid emails from `artixcore.com`, Gmail, Outlook, educational/research and arbitrary custom domains; do not whitelist providers.
-- Use Next.js `proxy.ts` rather than deprecated `middleware.ts`.
+- Public DTOs must not contain private email, recovery, device/session, OAuth-token, private-workspace or unpublished-draft fields.
+- Public surfaces never invent posts, users, verification, online, recommendation, count or security state.
+- Private routes fail closed when the `__Host-artx_session` signal is absent or backend session validation fails.
+- Accept ordinary valid emails from `artixcore.com`, Gmail, Outlook, educational/research and arbitrary custom domains; do not whitelist providers.
+- Use Next.js `proxy.ts`, not deprecated `middleware.ts`.
 - No GitHub Actions.
-- Keep UI calm, warm-neutral, professional and visibly related to the Android V200 design system.
+- Keep UI calm, warm-neutral, professional and visibly related to Android V200.
+- Unknown application routes default to private.
+- Full framework build is a merge gate; a blocked build is never reported as passed.
 
 ---
 
-### Task 1: Bootstrap the Next.js production foundation
+### Task 1: Secure Next.js foundation
 
 **Files:**
 - Create: `package.json`
@@ -34,206 +36,121 @@
 - Create: `.env.example`
 - Create: `src/app/layout.tsx`
 - Create: `src/app/globals.css`
+- Create: `src/core/security/security-headers.ts`
+- Test: `src/core/security/security-headers.test.ts`
 
 **Interfaces:**
-- Produces the production build/runtime configuration consumed by all later tasks.
+- Produces the pinned runtime and shared ARTX design/security baseline.
 
-- [ ] **Step 1: Add pinned runtime dependencies and scripts**
+- [x] Pin `next@16.3.3`, `react@19.2.7`, `react-dom@19.2.7`, TypeScript 7.0.2 and Node >=22.
+- [x] Enable strict TypeScript with `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes`.
+- [x] Add CSP, framing protection, `nosniff`, Referrer-Policy, Permissions-Policy and production HSTS.
+- [x] Use Android-V200-derived warm neutral design tokens, dark mode, 48px minimum targets and reduced-motion support.
+- [x] Verify the security-header contract with dependency-light tests.
 
-```json
-{
-  "name": "artx-communication-web",
-  "private": true,
-  "version": "0.1.0",
-  "engines": { "node": ">=22.0.0" },
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "typecheck": "tsc --noEmit",
-    "test:core": "node --experimental-strip-types --test src/core/**/*.test.ts"
-  },
-  "dependencies": {
-    "next": "16.3.3",
-    "react": "19.2.7",
-    "react-dom": "19.2.7",
-    "zod": "4.5.4"
-  },
-  "devDependencies": {
-    "@types/node": "^22.0.0",
-    "@types/react": "^19.2.0",
-    "@types/react-dom": "^19.2.0",
-    "typescript": "7.0.2"
-  }
-}
-```
-
-- [ ] **Step 2: Configure strict TypeScript**
-
-Use `strict: true`, `noUncheckedIndexedAccess: true`, `exactOptionalPropertyTypes: true`, `noEmit: true`, App Router JSX, and `@/* -> ./src/*` paths.
-
-- [ ] **Step 3: Configure security headers**
-
-`next.config.ts` must return headers for all routes including CSP with `default-src 'self'`, no wildcard script origin, `frame-ancestors 'none'`, `base-uri 'self'`, `form-action 'self'`; also `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=(), microphone=(), geolocation=(), browsing-topics=()`, `X-Frame-Options: DENY`, and production HSTS.
-
-- [ ] **Step 4: Create root layout and ARTX global tokens**
-
-Use CSS variables matching the warm Android V200 family (`#f1f0e8` background, `#f8f7f2` surface, `#141410` text, restrained graphite/terracotta accents), dark-mode equivalents, 48px minimum interactive target, and a typography/spacing system.
-
-- [ ] **Step 5: Validate JSON/TypeScript syntax locally**
-
-Run: `node -e "JSON.parse(require('fs').readFileSync('package.json','utf8')); console.log('package ok')"`
-Expected: `package ok`.
-
----
-
-### Task 2: Implement route privacy classification with TDD
+### Task 2: Public/private route policy
 
 **Files:**
-- Create: `src/core/security/route-policy.test.ts`
 - Create: `src/core/security/route-policy.ts`
+- Test: `src/core/security/route-policy.test.ts`
 - Create: `src/proxy.ts`
 
 **Interfaces:**
-- Produces: `classifyRoute(pathname): 'public' | 'private'` and `isPrivateRoute(pathname): boolean`.
+- Produces `classifyRoute(pathname): 'public' | 'private'` and `isPrivateRoute(pathname): boolean`.
 
-- [ ] **Step 1: Write the failing route-policy test**
+- [x] RED: route-policy test fails before implementation exists.
+- [x] GREEN: `/freeways`, `/aid/*`, `/research/*`, `/projects/*`, `/uswe/*`, `/search`, `/login`, `/register` are public.
+- [x] GREEN: `/home`, `/create/*`, `/messages`, `/notifications`, `/settings/*`, `/account/*`, `/security/*`, `/devices/*`, `/sessions/*`, `/integrations/*` are private.
+- [x] Unknown routes fail closed as private.
+- [x] Prefix-confusion paths such as `/freeways-malicious` remain private.
+- [x] `proxy.ts` redirects unauthenticated private navigation to `/login` without treating cookie presence as authorization.
 
-```ts
-import assert from 'node:assert/strict'
-import test from 'node:test'
-import { classifyRoute } from './route-policy.ts'
-
-test('keeps discovery public and settings private', () => {
-  assert.equal(classifyRoute('/freeways'), 'public')
-  assert.equal(classifyRoute('/aid/shams'), 'public')
-  assert.equal(classifyRoute('/research/quantum-auth'), 'public')
-  assert.equal(classifyRoute('/settings/security'), 'private')
-  assert.equal(classifyRoute('/account'), 'private')
-  assert.equal(classifyRoute('/messages'), 'private')
-})
-```
-
-- [ ] **Step 2: Run RED**
-
-Run: `node --experimental-strip-types --test src/core/security/route-policy.test.ts`
-Expected: FAIL because `route-policy.ts` does not exist.
-
-- [ ] **Step 3: Implement exact prefix classification**
-
-Public prefixes: `/`, `/freeways`, `/aid`, `/research`, `/projects`, `/uswe`, `/search`, `/login`, `/register`.
-Private prefixes: `/home`, `/create`, `/messages`, `/notifications`, `/settings`, `/account`, `/security`, `/devices`, `/sessions`, `/integrations`.
-Unknown application routes default to private.
-
-- [ ] **Step 4: Run GREEN**
-
-Run the same test and require PASS.
-
-- [ ] **Step 5: Add `src/proxy.ts`**
-
-For private routes only, check presence of `__Host-artx_session`. If missing, redirect to `/login?returnTo=<relative path>`. Never treat cookie presence as backend authorization.
-
----
-
-### Task 3: Implement identity validation and safe API errors with TDD
+### Task 3: Server-validated private session boundary
 
 **Files:**
-- Create: `src/core/validation/identity.test.ts`
-- Create: `src/core/validation/identity.ts`
-- Create: `src/core/errors/api-error.test.ts`
-- Create: `src/core/errors/api-error.ts`
+- Create: `src/core/config/server-env.ts`
+- Test: `src/core/config/server-env.test.ts`
+- Create: `src/core/auth/server-session.ts`
+- Create: `src/app/(private)/layout.tsx`
 
 **Interfaces:**
-- Produces: `normalizeEmail`, `validateEmail`, `validateAidHandle`, `normalizeApiError`.
+- `parseApiBaseUrl(raw, environment)` accepts HTTPS and development loopback HTTP only.
+- `hasValidServerSession()` revalidates `__Host-artx_session` with the Go `GET /v1/session` endpoint.
 
-- [ ] **Step 1: Write failing email tests**
+- [x] Reject malformed API URLs, embedded credentials and production HTTP.
+- [x] Allow loopback HTTP only during development.
+- [x] Bound the server-only session credential before forwarding it.
+- [x] Fail closed on missing config, missing cookie, timeout, network error or non-successful backend session response.
+- [x] Redirect private layouts to login before private content renders when backend validation fails.
 
-```ts
-import assert from 'node:assert/strict'
-import test from 'node:test'
-import { normalizeEmail, validateEmail } from './identity.ts'
-
-test('accepts Artixcore, Gmail and custom domains', () => {
-  for (const email of ['person@artixcore.com', 'person@gmail.com', 'researcher@university.edu', 'dev@my-company.dev']) {
-    assert.equal(validateEmail(email).ok, true, email)
-  }
-})
-
-test('normalizes case and whitespace but rejects malformed input', () => {
-  assert.equal(normalizeEmail('  Person@ARTIXCORE.COM '), 'person@artixcore.com')
-  assert.equal(validateEmail('not-an-email').ok, false)
-  assert.equal(validateEmail('a@').ok, false)
-})
-```
-
-- [ ] **Step 2: Run RED** and confirm missing module failure.
-
-- [ ] **Step 3: Implement bounded RFC-conscious validation**
-
-Trim/lowercase email, max 254 characters, local part max 64, require one `@`, nonempty labels, no leading/trailing dot/hyphen in labels, total domain bounds. Do not whitelist domains.
-
-- [ ] **Step 4: Add safe API error tests**
-
-Assert blank/hostile/oversized raw messages are replaced by `Something went wrong. Please try again.`; stable `code`, `retryable`, bounded `requestId` and field errors are preserved only after type/length validation.
-
-- [ ] **Step 5: Implement and run GREEN** for both test files.
-
----
-
-### Task 4: Implement alert state and passkey capability gating with TDD
+### Task 4: Identity validation, safe errors and alerts
 
 **Files:**
-- Create: `src/core/alerts/alert-state.test.ts`
+- Create: `src/core/validation/identity.ts`
+- Test: `src/core/validation/identity.test.ts`
+- Create: `src/core/errors/api-error.ts`
+- Test: `src/core/errors/api-error.test.ts`
 - Create: `src/core/alerts/alert-state.ts`
-- Create: `src/core/auth/passkey-capability.test.ts`
-- Create: `src/core/auth/passkey-capability.ts`
+- Test: `src/core/alerts/alert-state.test.ts`
 - Create: `src/components/alerts/alert-region.tsx`
 
 **Interfaces:**
-- Produces safe, bounded alert models and `canUsePasskey(capabilities, browserSupported)`.
+- Produces `normalizeEmail`, `validateEmail`, `validateAidHandle`, `normalizeApiError`, `makeAlert`, `enqueueAlert`.
 
-- [ ] **Step 1: Test alert bounding and semantic kinds**
+- [x] RED then GREEN email tests accept `person@artixcore.com`, Gmail, university and arbitrary normal custom domains without provider whitelisting.
+- [x] Reject empty, malformed, overlong and invalid-domain inputs.
+- [x] Bound AID handles to the approved lowercase identifier format.
+- [x] Replace blank, overlong or hostile raw backend messages with safe fallback copy.
+- [x] Preserve only bounded stable error code, request ID, retryability and field-error metadata.
+- [x] Limit alerts to approved semantic kinds, 240 characters and the five most recent entries.
+- [x] Use accessible `status` / `alert` roles instead of unbounded toast spam.
 
-Reject unknown kinds; trim messages; cap user-visible message at 240 characters; cap queue at five most-recent alerts.
-
-- [ ] **Step 2: Run RED, implement, run GREEN**.
-
-- [ ] **Step 3: Test passkey gating**
-
-Passkeys return true only when browser support is true and an enabled capability named exactly `auth.webauthn-v1` exists.
-
-- [ ] **Step 4: Run RED, implement, run GREEN**.
-
-- [ ] **Step 5: Build `AlertRegion`**
-
-Use `role=status` for success/info and `role=alert` for warning/error, no raw exception rendering, calm compact styling.
-
----
-
-### Task 5: Build public ARTX surfaces without fake data
+### Task 5: Passkey capability truthfulness
 
 **Files:**
-- Create: `src/components/shell/public-shell.tsx`
-- Create: `src/components/shell/path-rail.tsx`
-- Create: `src/components/shell/context-rail.tsx`
-- Create: `src/components/states/truthful-empty-state.tsx`
-- Create: `src/app/page.tsx`
-- Create: `src/app/freeways/page.tsx`
-- Create: `src/app/aid/[handle]/page.tsx`
+- Create: `src/core/auth/passkey-capability.ts`
+- Test: `src/core/auth/passkey-capability.test.ts`
+- Create: `src/core/api/capabilities.ts`
+- Create: `src/components/auth/auth-email-form.tsx`
 - Create: `src/app/login/page.tsx`
 - Create: `src/app/register/page.tsx`
 
 **Interfaces:**
-- Public pages render only static product framing and truthful capability-unavailable/empty states until public APIs exist.
+- `canUsePasskey(capabilities, browserSupported)` returns true only for enabled exact `auth.webauthn-v1` plus browser support.
 
-- [ ] **Step 1: Build the three-surface shell** with no decorative dashboard clutter.
-- [ ] **Step 2: Build Freeways** with categories (Knowledge, Research, People, Projects, Problems, UsWe, Agents) but no fabricated counts/content.
-- [ ] **Step 3: Build public AID route** with handle validation and a safe `Public profile data is not available yet` state rather than fake person data.
-- [ ] **Step 4: Build login/register forms** accepting arbitrary valid email domains and explaining passkey-first authentication. Submit controls remain disabled/unavailable until server WebAuthn capability wiring exists.
+- [x] RED then GREEN capability-gating tests.
+- [x] Fetch public backend capabilities server-side with no-store and bounded timeout.
+- [x] Accept Artixcore, Gmail, Outlook, education/research and custom-domain email input.
+- [x] Never simulate login when WebAuthn backend capability is missing.
+- [x] Never silently enable password fallback.
+- [x] When WebAuthn client ceremony is not implemented, explicitly state that no credentials were sent.
 
----
+### Task 6: Calm public ARTX surfaces
 
-### Task 6: Build private settings shell and fail-closed edit surfaces
+**Files:**
+- Create: `src/components/shell/path-rail.tsx`
+- Create: `src/components/shell/context-rail.tsx`
+- Create: `src/components/shell/public-shell.tsx`
+- Create: `src/components/states/truthful-empty-state.tsx`
+- Create: `src/components/states/public-domain-placeholder.tsx`
+- Create: `src/app/page.tsx`
+- Create: `src/app/freeways/page.tsx`
+- Create: `src/app/aid/[handle]/page.tsx`
+- Create: `src/app/search/page.tsx`
+- Create: `src/app/research/[slug]/page.tsx`
+- Create: `src/app/projects/[slug]/page.tsx`
+- Create: `src/app/uswe/[slug]/page.tsx`
+
+**Interfaces:**
+- Public pages render only public product framing and truthful empty/unavailable state until production APIs exist.
+
+- [x] Implement Path Rail + Primary Surface + Context Rail on wide screens and a simplified mobile composition.
+- [x] Keep Freeways public with Knowledge, Research, People, Projects, Problems, UsWe and Agents categories.
+- [x] Validate AID handles before presenting the public profile shell.
+- [x] Do not fabricate biography, skills, repositories, reputation, verification, counts, activity or recommendations.
+- [x] Public research/project/UsWe placeholders state explicitly that private workspace data is never exposed as placeholder content.
+
+### Task 7: Private owner surfaces
 
 **Files:**
 - Create: `src/components/shell/private-shell.tsx`
@@ -242,39 +159,31 @@ Use `role=status` for success/info and `role=alert` for warning/error, no raw ex
 - Create: `src/app/(private)/settings/security/page.tsx`
 - Create: `src/app/(private)/account/page.tsx`
 - Create: `src/app/(private)/aid/edit/page.tsx`
+- Create: `src/app/(private)/create/page.tsx`
+- Create: `src/app/(private)/messages/page.tsx`
+- Create: `src/app/(private)/notifications/page.tsx`
+- Create: `src/core/navigation/navigation-model.ts`
+- Test: `src/core/navigation/navigation-model.test.ts`
 
 **Interfaces:**
-- Produces authenticated-only shell surfaces. No private data is embedded in static/public page modules.
+- Public navigation and private navigation are separate immutable models.
 
-- [ ] **Step 1:** Build private shell with explicit `Private workspace` status and no fake account values.
-- [ ] **Step 2:** Add Settings, Security, Account and Edit AID pages as private routes with safe unavailable states until APIs exist.
-- [ ] **Step 3:** Ensure public navigation never exposes private payloads; links may exist, data may not.
+- [x] Keep Settings, Account, Security and Edit AID private by route and navigation model.
+- [x] Keep Home/Create/Messages/Notifications behind backend-confirmed session validation.
+- [x] Render no fake account, session, device, message or notification state while APIs are unconnected.
+- [x] Preserve the existing E2EE boundary for future web messaging.
 
----
-
-### Task 7: Verification and handoff
+### Task 8: Verification and handoff
 
 **Files:**
-- Modify only if verification exposes defects.
+- Create: `docs/verification/2026-09-09-web-foundation-auth.md`
 
-- [ ] **Step 1: Run all dependency-light core tests**
+- [x] Run `npm run test:core` -> 19 tests PASS, 0 fail.
+- [x] Scan `src` for `localStorage` / `sessionStorage` -> no credential-storage implementation found.
+- [x] Run TypeScript/JSX syntax smoke check with local declaration stubs -> PASS.
+- [ ] Run `npm install`/`npm ci` in a network-enabled environment.
+- [ ] Run `npm run typecheck` with actual Next/React packages.
+- [ ] Run `npm run build`.
+- [ ] Perform browser-rendered responsive/accessibility visual QA.
 
-`node --experimental-strip-types --test src/core/**/*.test.ts`
-
-Expected: all PASS.
-
-- [ ] **Step 2: Run dependency installation/build if registry access exists**
-
-`npm ci || npm install`
-`npm run typecheck`
-`npm run build`
-
-If package registry access is unavailable, mark typecheck/build dependency resolution as BLOCKED, not passed.
-
-- [ ] **Step 3: Scan source for token-storage regressions**
-
-`grep -R "localStorage\|sessionStorage" src || true`
-
-Expected: no credential-storage implementation.
-
-- [ ] **Step 4: Commit branch and open a draft PR** with exact verification state.
+The four unchecked gates are currently **BLOCKED by npm registry DNS/network access in the execution environment**, not reported as passed. They remain mandatory before merge/release.
