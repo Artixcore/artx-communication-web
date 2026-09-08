@@ -2,9 +2,9 @@
 
 Branch: `codex/web-foundation-auth`
 
-## Verified locally
+## Fresh verified locally
 
-- `npm run test:core`: **PASS**, 19 tests, 0 failures.
+- `npm run test:core`: **PASS**, 20 tests, 0 failures.
 - Route policy keeps Freeways/public AID/research/project/UsWe/search/auth surfaces public while settings/account/security/messages/create/notifications and unknown routes fail closed as private.
 - Prefix-confusion regression checks pass (`/freeways-malicious` and `/aid-malicious/*` remain private).
 - Email validation accepts normal addresses at `artixcore.com`, Gmail, university/research and arbitrary custom domains without provider whitelisting; malformed input is rejected.
@@ -13,7 +13,8 @@ Branch: `codex/web-foundation-auth`
 - Alert state is bounded to safe semantic types, 240-character messages and five recent alerts.
 - Passkey UI is enabled only when browser support exists and the backend explicitly advertises enabled `auth.webauthn-v1`.
 - Server API URL validation requires HTTPS outside loopback development and rejects embedded credentials.
-- Security-header tests verify CSP has no wildcard script source, framing is denied, dangerous browser permissions are disabled and production HSTS is present.
+- Strict CSP uses a fresh per-request nonce in `proxy.ts`, passes it to Next through `x-nonce`, applies `strict-dynamic`, excludes `unsafe-inline`, permits `unsafe-eval` only in development, and forces dynamic rendering through `connection()` so Next can apply the nonce to framework scripts/styles.
+- Static browser protections remain separate: framing is denied, `nosniff` is enabled, dangerous browser permissions are disabled, and production HSTS is present.
 - Source scan for `localStorage` / `sessionStorage`: **no credential-storage implementation found**.
 - TypeScript/JSX syntax smoke check using local declaration stubs: **PASS**.
 
@@ -26,7 +27,7 @@ Therefore this record does **not** claim:
 - `npm install` or `npm ci` succeeded,
 - `npm run typecheck` with real Next/React type packages succeeded,
 - `npm run build` succeeded,
-- browser-rendered visual QA succeeded.
+- browser-rendered visual/accessibility QA succeeded.
 
 These gates must run in a network-enabled controlled environment before the branch is eligible for merge/release.
 
