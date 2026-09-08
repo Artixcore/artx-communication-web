@@ -10,7 +10,7 @@ The web app is a presentation client over `Artixcore/artx-communication-server`.
 
 ## Supported identity inputs
 
-Users may associate any syntactically valid email address, including `@artixcore.com`, Gmail, Outlook, educational, research, or custom business domains. The UI must not whitelist consumer providers. Email is an identity/contact factor, not a privileged authentication bypass.
+Users may associate any ordinary syntactically valid email address, including `@artixcore.com`, Gmail, Outlook, educational, research, or custom business domains. The UI must not whitelist consumer providers. Email is an identity/contact factor, not a privileged authentication bypass.
 
 Primary authentication direction is passkey/WebAuthn-first. Until the Go backend advertises a reviewed `auth.webauthn-v1` capability, the web client must present passkey authentication as unavailable rather than simulate successful login.
 
@@ -29,7 +29,7 @@ No public DTO may accidentally contain private email addresses, recovery data, d
 
 Public routes include `/`, `/freeways`, `/aid/[handle]`, `/research/[slug]`, `/projects/[slug]`, `/uswe/[slug]`, `/search`, `/login`, and `/register`, but domain objects render only when the API marks them public.
 
-Private routes include `/home`, `/create/*`, `/messages`, `/notifications`, `/settings/*`, `/account/*`, `/security/*`, `/devices/*`, `/sessions/*`, `/integrations/*`, and private workspace routes.
+Private routes include `/home`, `/create/*`, `/messages`, `/notifications`, `/settings/*`, `/account/*`, `/security/*`, `/devices/*`, `/sessions/*`, `/integrations/*`, and private workspace routes. Unknown application routes fail closed as private.
 
 The web shell uses a calm three-surface composition on wide screens: Path Rail, Primary Surface, and Context Rail. Mobile collapses to the primary surface with contextual actions. It inherits the existing Android V200 visual family: warm neutral surfaces, disciplined typography, restrained accents, generous whitespace, accessible targets, and no clone-like social/SaaS dashboard styling.
 
@@ -37,18 +37,20 @@ The web shell uses a calm three-surface composition on wide screens: Path Rail, 
 
 - No access or refresh token in `localStorage` or `sessionStorage`.
 - Production authentication uses Secure, HttpOnly, SameSite cookies issued/validated through server-side web auth endpoints or a trusted same-origin BFF boundary.
+- Proxy cookie presence is only an early navigation optimization and is never sufficient authorization.
+- Before private layouts render, the server-side web client revalidates the credential against the Go backend session endpoint.
 - Private route checks fail closed when session state is missing, invalid, expired, or indeterminate.
 - Sensitive settings may require step-up authentication once the backend capability exists.
 
 ## Validation
 
-Client validation improves UX; backend validation remains authoritative. Zod schemas validate email, handles, route params, form values, safe API errors and public DTOs. Inputs are trimmed and bounded. Unknown fields in security-sensitive DTOs are rejected where doing so prevents accidental data leakage.
+Client validation improves UX; backend validation remains authoritative. The first slice uses small dependency-light validators for email, AID handles, route classification, API base URLs, safe API errors and capability objects. Inputs are trimmed and bounded. Third-party schema libraries should be introduced only where API complexity justifies their supply-chain cost. Security-sensitive data contracts reject malformed or excessive values instead of reflecting them.
 
 ## Error and alert policy
 
 The client consumes stable backend error codes and never parses English messages for branching. Raw exceptions, stack traces, SQL errors, hostnames, tokens, signed URLs, keys or request bodies must never reach user-visible alerts.
 
-Alerts use four restrained semantic classes: success, information, warning and error. Field validation stays adjacent to the field instead of producing toast storms. Unknown failures show safe copy plus a request ID when available.
+Alerts use four restrained semantic classes: success, information, warning and error. Field validation stays adjacent to the field instead of producing toast storms. Unknown failures show safe copy plus a bounded request ID when available.
 
 ## Security headers
 
@@ -56,7 +58,7 @@ The Next.js foundation sets a strict baseline for CSP, frame protection, `nosnif
 
 ## Freeways and public profiles
 
-The first implementation is structurally real but truthfully empty until production public APIs exist. It must not invent posts, users, connection states, verification states or recommendations. Empty/capability-unavailable states are first-class UI.
+The first implementation is structurally real but truthfully empty until production public APIs exist. It must not invent posts, users, connection states, verification states, presence, counts or recommendations. Empty/capability-unavailable states are first-class UI.
 
 ## Central Command
 
@@ -64,12 +66,13 @@ This slice reports its release/build/capability state to the ARTX Central Comman
 
 ## Definition of done
 
-- Next.js Active LTS foundation builds successfully.
+- Next.js Active LTS foundation is committed on an isolated branch.
 - Public/private route classification is unit tested.
-- Private surfaces fail closed without a valid server session signal.
-- Email validation accepts `@artixcore.com`, Gmail and arbitrary valid domains while rejecting malformed addresses.
+- Private surfaces fail closed without a valid backend-confirmed server session.
+- Email validation accepts `@artixcore.com`, Gmail and arbitrary normal custom domains while rejecting malformed addresses.
 - Safe API error normalization is tested for blank, oversized and hostile messages.
 - Public Freeways/AID shells contain no fake data.
 - Settings/edit surfaces are private by construction.
-- Security headers are configured and tested where practical.
-- Lint, type-check, unit tests and production build pass locally before the branch is presented for merge.
+- Security headers are configured and covered by dependency-light tests.
+- Core tests and credential-storage scan pass locally.
+- Real dependency installation, framework type-check, production build and browser visual QA must pass in a network-enabled environment before merge; blocked gates are never reported as passed.
