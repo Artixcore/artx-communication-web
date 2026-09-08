@@ -1,0 +1,2 @@
+import { TruthfulEmptyState } from '@/components/states/truthful-empty-state'
+export default function MessagesPage() { return <><p className="artx-kicker">Encrypted communication</p><h1 className="artx-title">Messages</h1><TruthfulEmptyState title="Secure web messaging is not connected yet" body="ARTX will reuse the existing E2EE backend and will not substitute plaintext browser messaging." /></> }

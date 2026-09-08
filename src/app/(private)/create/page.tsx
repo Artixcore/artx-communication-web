@@ -1,0 +1,2 @@
+import { TruthfulEmptyState } from '@/components/states/truthful-empty-state'
+export default function CreatePage() { return <><p className="artx-kicker">Private create</p><h1 className="artx-title">Create</h1><TruthfulEmptyState title="Workspace creation arrives with the next vertical slice" body="Research, Project, Problem, UsWe and Collaboration creation will share the authenticated workspace contract." /></> }

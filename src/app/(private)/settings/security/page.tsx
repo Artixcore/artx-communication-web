@@ -1,0 +1,2 @@
+import { TruthfulEmptyState } from '@/components/states/truthful-empty-state'
+export default function SecuritySettingsPage() { return <><p className="artx-kicker">Owner only</p><h1 className="artx-title">Security</h1><TruthfulEmptyState title="Security controls are awaiting API connection" body="Session, device and step-up controls will render only from authenticated server data. No device or verification state is guessed." /></> }

@@ -1,0 +1,2 @@
+import { TruthfulEmptyState } from '@/components/states/truthful-empty-state'
+export default function HomePage() { return <><p className="artx-kicker">Private home</p><h1 className="artx-title">Your work, not everyone’s noise.</h1><TruthfulEmptyState title="Private home data is not connected yet" body="No account, project, message or notification data is fabricated while authenticated APIs are being connected." /></> }
